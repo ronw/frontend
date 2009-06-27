@@ -1,3 +1,5 @@
+import numpy
+
 class MockSndfile(object):
     """
     Wraps an audiolab Sndfile interface around a NumPy array.
@@ -22,18 +24,19 @@ class MockSndfile(object):
         self.file_format = None
         self.format = None
         
-    def read_frames(self, nframes, dtype=numpy.float32):
+    def read_frames(self, nframes, dtype=None):
         end = self._curr_index + nframes
         if self._curr_index > self.nframes or end > self.nframes:
             nread = self.nframes - self._curr_index
             self._curr_index += nread
             raise (RuntimeError, 'Asked %d frames, read %d' % (nframes, nread))
-        else:
-            start = self._curr_index
-            self._curr_index += nframes
-            frames = self._array[start:end]
+
+        start = self._curr_index
+        self._curr_index += nframes
+        frames = self._array[start:end]
+        if dtype:
             frames.dtype = dtype
-            return frames
+        return frames
             
     def write_frames(self, frames):
         pass
@@ -52,6 +55,8 @@ class MockSndfile(object):
             self._curr_index = new_curr_index
         else:
             raise (IOError, 'Tried to seek too far')
+
+        return self._curr_index
     
     def close(self):
         pass

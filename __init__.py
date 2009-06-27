@@ -3,18 +3,8 @@
 """
 frontend: Audio feature extraction API
 
+Makes extensive use of generator pipelines.
 Construct pipelines of feature extractors.
-
-Makes extensive use of generator pipelines.  Every feature extraction
-function has two forms:
-
-  pfun(): Generator for use in pipeline, takes an array of features
-          (or another generator in the pipeline) and yields one audio
-          frame at a time.
-
-  afun(): Stand-alone function which takes an array of features and
-          returns another array.  Useful for interactive applications,
-          etc.
 
 The most common usage of this module will be through the pipeline()
 function (or one of the predefined piplelines) which is used to string
@@ -23,6 +13,9 @@ follows:
 
   feat = pipeline(framer('path/to/file', nwin=100), tomono, preemphasize, window(hamming), fft, abs)
   
+Many feature extraction function have an additional form which allows
+it to be called on its own.  For example, the fun() generator might
+also have a standalone form, standalone.fun().
 
 Copyright (C) 2009 Ron J. Weiss (ronweiss@gmail.com)
 
@@ -44,11 +37,11 @@ __author__ = "Ron J. Weiss <ronweiss@gmail.com>"
 __version__ = "0.1"
 
 
-from version import version as _version
-__version__ = _version
+#from version import version as _version
+#__version__ = _version
 
 from frontend import *
+from windows import *
 
-__all__ = filter(lambda s:not s.startswith('_'),dir())
-
+__all__ = filter(lambda s: not s.startswith('_'), dir())
 
