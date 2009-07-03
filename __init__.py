@@ -11,7 +11,12 @@ function (or one of the predefined piplelines) which is used to string
 together a set of generators to create compound feature extractors as
 follows:
 
-  feat = pipeline(framer('path/to/file', nwin=100), tomono, preemphasize, window(hamming), fft, abs)
+  feat = pipeline(framer('path/to/file', nwin=100),
+                  tomono(),
+                  preemphasize(),
+                  window(hamming),
+                  fft(),
+                  abs())
   
 Many feature extraction function have an additional form which allows
 it to be called on its own.  For example, the fun() generator might
@@ -36,6 +41,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __author__ = "Ron J. Weiss <ronweiss@gmail.com>"
 __version__ = "0.1"
 
+
+# requirement: Each pipeline generator must create consistent outputs
+# - the dimensionality cannot change mid-stream.  Generators do not
+# need to output something for every input it receives (i.e. could
+# have a VAD generator that only passes through frames it thinks
+# contain speech)
 
 #from version import version as _version
 #__version__ = _version

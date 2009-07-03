@@ -17,7 +17,7 @@ class TestAudioFile(unittest.TestCase):
 class TestFramer(unittest.TestCase):
     def _test_framer(self, n, nbuf, nwin, nhop):
         samples = numpy.arange(n)
-        frames = framer(audio_source(samples, nbuf), nwin, nhop)
+        frames = framer(audio_source(samples, nbuf=nbuf), nwin, nhop)
 
         nframes = int(numpy.ceil(1.0 * len(samples) / nhop))
         for x in range(nframes):
@@ -46,21 +46,38 @@ class TestFramer(unittest.TestCase):
     def test_framer_full_hop(self):
         self._test_framer(90, 50, 20, 20)
     def test_framer_relatively_prime(self):
-        self._test_framer(500, 51, 23, 7)
+        self._test_framer(500, 101, 23, 7)
 
 
 class TestSimpleComponents(unittest.TestCase):
+    def test_tomono(self):
+        nsamp = 1000
+        nbuf = 10
+        frames = numpy.random.rand(nsamp, 2)
+
+        gen = audio_source(frames, nbuf=nbuf)
+        stereo_frames = numpy.array([x for x in gen])
+
+        gen = tomono(audio_source(frames, nbuf=nbuf))
+        mono_frames = numpy.array([x for x in gen])
+
+        self.assert_(stereo_frames.shape != mono_frames.shape)
+        self.assertEqual(mono_frames.shape, (nsamp/nbuf, nbuf))
+
+    def test_fft_ifft(self):
+        nsamp = 1024
+        nfft = 32;
+        for nbuf in [8, 16, 32]:
+            samples = numpy.random.rand(nsamp)
+            frames = numpy.array([x for x in audio_source(samples, nbuf=nbuf)])
+
+            gen = ifft(fft(audio_source(samples, nbuf=nbuf), nfft), nfft)
+            test_frames = numpy.array([x for x in gen])
+
+            assert_array_almost_equal(frames, test_frames[:,:nbuf])
+
     def test_delta(self):
         pass
-
-    def test_tomono(self):
-        frames = numpy.random.rand(100, 2)
-
-        mono_frames = [x for x in tomono(audio_source(frames, 10))]
-
-    def test_dB(self):
-        pass
-    
     def test_stft(self):
         pass
     def test_mfcc(self):
