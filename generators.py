@@ -10,9 +10,6 @@ import scipy as sp
 import scikits.audiolab as audiolab
 #from scikits.samplerate import resample
 
-from mock_sndfile import MockSndfile
-
-
 def _generator(func):
     """Turn a standalone function into a generator.
 
@@ -54,36 +51,6 @@ def _generator(func):
 #         yield item
 # def generator_to_coroutine():
 
-# source
-def audio_source(filename, start=0, end=None, nbuf=None):
-    """ Returns a generator that returns sequential lists of nbuf samples
-
-    
-    arguments should be in second (or ms) units, not samples (as they
-    are now)
-    """
-    if isinstance(filename, str):
-        f = audiolab.Sndfile(filename)
-    elif np.iterable(filename):
-        f = MockSndfile(filename)
-    else:
-        raise ValueError, 'Invalid filename: %s' % filename
-
-    if not end:
-        end = f.nframes
-    if not nbuf:
-        nbuf = 10*f.samplerate
-
-    pos = f.seek(start)
-    nremaining = end - pos
-    while nremaining > nbuf:
-        yield f.read_frames(nbuf)
-        nremaining -= nbuf
-
-    if nremaining > 0:
-        yield f.read_frames(nremaining)
-    f.close()
-        
 @_generator
 def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
     """Use scikits.samplerate
@@ -305,7 +272,7 @@ def pickpeaks(frame):
     highidx = np.concatenate((range(1, len(frame)), [len(frame) - 1]))
     localmax = np.logical_and(frame > frame[lowidx],
                               frame >= frame[highidx])
-    return frame*localmax
+    return frame * localmax
 
 def _create_constant_q_kernel(nbin, bins_per_octave, lowbin, highbin):
     """
@@ -355,14 +322,14 @@ def _hz_to_mel(freq, htk=False):
         linpts = (f < brkfrq);
         mel
 
-def mel_filterbank(fft_frames, samplerate=8000, nfilts=40, width=1.0,
+def melfb(fft_frames, samplerate=8000, nfilts=40, width=1.0,
                    minfreq=0, maxfreq=None, htkmel=0, constamp=0):
     if maxfreq is None:
         maxfreq = samplerate/2
     for frame in fft_frames:
         pass
 
-def chromafb(nfft, nbin, sr, A440=440.0, ctroct=5.0, octwidth=0):
+def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     """
     Based on dpwe's fft2chromamx.m
 
@@ -375,8 +342,8 @@ def chromafb(nfft, nbin, sr, A440=440.0, ctroct=5.0, octwidth=0):
     """
     wts = np.zeros((nbin, nfft))
 
-    fftfrqbins = nbin * _hz2octs(np.arange(1, nfft, dtype='d') / nfft * sr,
-                                 A440)
+    fftfrqbins = nbin * _hz2octs(np.arange(1, nfft, dtype='d') / nfft
+                                 * samplerate, A440)
 
     # make up a value for the 0 Hz bin = 1.5 octaves below bin 1
     # (so chroma is 50% rotated from bin 1, and bin width is broad)
@@ -420,10 +387,4 @@ def chroma(samples, fs, nfft, nwin=None, nhop=None, winfun=np.hamming, nchroma=1
 
     return filterbank(pickpeaks(
         abs(stft(samples, nfft, nwin, nhop, winfun))), CM)
-
-
-
-
-
-
 

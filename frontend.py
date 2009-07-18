@@ -11,21 +11,26 @@ import functools
 
 import numpy
 
-__all__ = ['pipeline', 'toarray', 'tohtkfile']
+__all__ = ['pipeline', 'array', 'tohtkfile']
+import sources
+from sources import *
+import sinks
+from sinks import *
+__all__.extend(dir(sources))
 
 # Based on pipe() from
 # http://paddy3118.blogspot.com/2009/05/pipe-fitting-with-python-generators.html
-def pipeline(*cmds):
-    """ String a set of generators together to form a pipeline.
+def pipeline(src, *cmds):
+    """String a set of generators together to form a pipeline.
     
     pipeline(a,b,c,d, ...) -> yield from ...d(c(b(a())))
     """
-    print cmds
-    gen = cmds[0]
-    for cmd in cmds[1:]:
+    print 'pipeline', src, cmds
+    gen = src
+    for cmd in cmds:
         gen = cmd(gen)
-    for x in gen:
-        yield x
+    return gen
+
 
 # Add constructors for all pipeline generators to this module's namespace.
 def _constructor(gen):
@@ -51,18 +56,8 @@ generators_names = [name for name in dir(generators)
                     if (callable(getattr(generators, name))
                         and not name.startswith('_'))]
 for name in generators_names:
-    func = getattr(generators, name)
-    setattr(generators, name, _constructor(func))
-from generators import *
-__all__.extend(generators_names)
-
-# Sinks
-def toarray(frames):
-    return numpy.array([x for x in frames])
-
-def tohtkfile():
-    # probably depends on toarray
-    pass
+    exec("%s = _constructor(generators.%s)" % (name, name))
+    __all__.append(name)
 
 if __name__ == '__main__':
     def api_samples():
