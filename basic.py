@@ -31,7 +31,11 @@ def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
 #        yield sum(frame)/frame.shape[1]
 @decorators.generator
 def mono(frame):
-    return frame.mean(1)
+    if frame.ndim > 1:
+        mono_frame =  frame.mean(1)
+    else:
+        mono_frame = frame
+    return mono_frame
 
 @decorators.generator
 def preemphasize():  # or just filter()
@@ -47,7 +51,7 @@ def framer(samples, nwin=512, nhop=None):
     
     handles zero padding of final frames
     """
-    if not type(samples) is types.GeneratorType:
+    if not issubclass(samples.__class__, types.GeneratorType):
         samples = (x for x in [samples])
     
     if not nhop:

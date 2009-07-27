@@ -25,7 +25,6 @@ def pipeline(src, *cmds):
     
     pipeline(a,b,c,d, ...) -> yield from ...d(c(b(a())))
     """
-    print 'pipeline', src, cmds
     gen = src
     for cmd in cmds:
         gen = cmd(gen)
@@ -46,7 +45,6 @@ def _constructor(gen):
     """
     @functools.wraps(gen)
     def f(*args, **kwargs):
-        print gen.__name__, kwargs
         return lambda lst: gen(lst, *args, **kwargs)
     return f
 

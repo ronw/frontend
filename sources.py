@@ -28,10 +28,12 @@ def audio_source(filename, start=0, end=None, nbuf=None):
 
     pos = f.seek(start)
     nremaining = end - pos
-    while nremaining > nbuf:
-        yield f.read_frames(nbuf)
-        nremaining -= nbuf
-
-    if nremaining > 0:
-        yield f.read_frames(nremaining)
+    while nremaining > 0:
+        if nremaining < nbuf:
+            nbuf = nremaining
+        try:
+            yield f.read_frames(nbuf)
+            nremaining -= nbuf 
+        except RuntimeError:
+            nremaining = 0
     f.close()

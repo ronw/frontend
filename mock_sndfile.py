@@ -1,5 +1,3 @@
-import numpy
-
 class MockSndfile(object):
     """
     Wraps an audiolab Sndfile interface around a NumPy array.

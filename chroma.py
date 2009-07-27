@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 
 import basic
+import decorators
 
 def _hz2octs(freq, A440):
     return np.log2(freq / (A440 / 16.0))
