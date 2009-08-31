@@ -17,42 +17,54 @@ def pickpeaks(frame):
                               frame >= frame[highidx])
     return frame * localmax
 
-def _create_constant_q_kernel(nbin, bins_per_octave, lowbin, highbin):
+def constantqfb(fs, nfft, fmin, fmax, bpo=12):
     """
-    Based on Dan Ellis' logfmap.m
-    """
-    ratio = (highbin - 1.0) / highbin
-    opr = int(round(np.log(lowbin / highbin) / np.log(ratio)))
-    print opr
-    ibin = lowbin * np.exp(np.arange(opr) * -np.log(ratio))
-
-    cqmx = np.zeros((opr,nbin))
-
-    eps = np.finfo(np.double).eps
-    for i in range(opr):
-        tt = np.pi * (np.arange(nbin) - ibin[i])
-        cqmx[i] = (np.sin(tt) + eps) / (tt+eps)
-
-    return cqmx
-
-def constantq(fs, fmin, fmax, bins_per_octave=12):
-    """
-
+    
     Based on B. Blankertz, "The Constant Q Transform"
     http://ida.first.fhg.de/publications/drafts/Bla_constQ.pdf
     """
+    Q = 1 / (2 ** (1.0 / bpo) - 1)
 
-    Q = 1 / (2 ** (1.0 / bins_per_octave) - 1)
+    #nfft = 2 ** np.ceil(np.log2(np.ceil(Q * fs / fmin)))
+    # Compute minimum fmin from nfft
+    if fmin < Q * fs / nfft:
+        fmin = Q * fs / nfft
+        print 'fmin too small for nfft, increasing to %.2f' % fmin
+        #log.warning('fmin too small for nfft, increasing to %d', fmin)
 
-    K = np.ceil(bins_per_octave * np.log2(fmax / fmin))
+    K = np.ceil(bpo * np.log2(float(fmax) / fmin))
+    
+    tempkernel = np.zeros(nfft)
+    kernel = np.zeros((K, nfft / 2 + 1), dtype=np.complex)
+    for k in np.arange(K-1, -1, -1, dtype=np.float):
+        ilen = np.ceil(Q * fs / (fmin * 2.0**(k / bpo)))
+        if ilen % 2 == 0:
+            # calculate offsets so that kernels are centered in the
+            # nfftgth windows
+            start = nfft / 2 - ilen / 2
+        else:
+            start = nfft / 2 - (ilen + 1) / 2        
 
-    fftlen = 2 ** np.ceil(np.log2(np.ceil(Q * fs / fmin)))
+        tempkernel[:] = 0
+        tempkernel[start:start+ilen] = (np.hamming(ilen) / ilen
+                                        * np.exp(2 * np.pi * 1j * Q
+                                                 * np.r_[:ilen] / ilen))
+        kernel[k] = np.fft.rfft(tempkernel)
+    return kernel / nfft
 
-    tempKernel = np.zeros((fftlen,1))
-    sparKernel = []
-    for k in xrange(K, 0, -1):
-        ilen = np.ceil(Q * fs / (fmin * 2**(k / bpo)))
+@decorators.generator
+def constantq_to_chroma(cqframe, bpo=12):
+    hpcp = np.zeros(bpo)
+    for n in xrange(0, len(cqframe), bpo):
+        cqoct = cqframe[n:n+bpo]
+        hpcp[:len(cqoct)] += cqoct
+    return hpcp
 
+def cqchroma(samples, fs, nfft, nwin=None, nhop=None, winfun=np.hamming,
+             nchroma=12, fmin=55.0, fmax=587.36):
+    CQ = constantqfb(fs, nfft, fmin, fmax, nchroma)
+    return constantq_to_chroma(basic.abs(basic.filterbank(
+        basic.stft(samples, nfft, nwin, nhop, winfun), CQ)), nchroma)
 
 def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     """
@@ -93,22 +105,20 @@ def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     # normalize each column
     wts /= np.tile(np.sqrt(np.sum(wts**2, 0)), (nbin,1))
 
-    # remove aliasing columns
-    wts[:,nfft/2+1:] = 0;
-
     # Maybe apply scaling for fft bins
     if octwidth > 0:
         wts *= np.tile(
             np.exp(-0.5 * (((fftfrqbins/nbin - ctroct)/octwidth)**2)),
             (nbin, 1))
 
-    return wts
+    # remove aliasing columns
+    return wts[:,:nfft/2+1]
 
 def chroma(samples, fs, nfft, nwin=None, nhop=None, winfun=np.hamming, nchroma=12, center=1000, sd=1):
     A0 = 27.5  # Hz
     A440 = 440 # Hz
     f_ctr_log = np.log2(center/A0)
-    CM = chromafb(nfft/2+1, nchroma, fs, A440, f_ctr_log, sd)
+    CM = chromafb(nfft, nchroma, fs, A440, f_ctr_log, sd)
 
     return basic.filterbank(pickpeaks(
         basic.abs(basic.stft(samples, nfft, nwin, nhop, winfun))), CM)
