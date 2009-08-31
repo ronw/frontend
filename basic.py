@@ -5,9 +5,19 @@ import types
 import numpy as np
 import scipy as sp
 
-from scikits.samplerate import resample
+import scikits.samplerate as samplerate
 
 import decorators
+
+# import a bunch of numpy functions directly:
+external_funcs = {'abs': np.abs, 'log': np.log,
+                  'real': np.real, 'imag': np.imag,
+                  'diff': np.diff, 'flatten': lambda x: x.flatten(),
+                  'fft': np.fft.fft, 'ifft': np.fft.ifft,
+                  'rfft': np.fft.rfft, 'irfft': np.fft.irfft}
+for local_name, func in external_funcs.iteritems():
+    defun = "%s = decorators.generator(func)" % local_name
+    exec(defun)
 
 @decorators.generator
 def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
@@ -18,8 +28,12 @@ def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
     """
     if ratio is None:
         return frame
+    return samplerate.resample(frame, ratio, type, verbose)
 
-    new_frame = samplerate.resample(frame, ratio, type, verbose)
+@decorators.generator
+def normalize(frame, ord=None):
+    """Normalize each frame using a norm of the given order"""
+    return frame / np.linalg.norm(frame, ord)
 
 # this is slower than the implementation below which does not use the
 # @decorators.generator decorator
@@ -42,7 +56,7 @@ def preemphasize():  # or just filter()
     pass
 
 
-# essentially a ring buffer! - works for matrices too... (really row features)
+# essentially a simple buffer - works for matrices too... (really row features)
 def framer(samples, nwin=512, nhop=None):
     """open arbitrary audio file
     
@@ -113,16 +127,6 @@ def window(frames, winfun=np.hanning):
         if win is None:
             win = winfun(len(frame))
         yield win * frame
-
-# import a bunch of numpy functions directly:
-external_funcs = {'abs': np.abs, 'log': np.log,
-                  'real': np.real, 'imag': np.imag,
-                  'diff': np.diff,
-                  'fft': np.fft.fft, 'ifft': np.fft.ifft,
-                  'rfft': np.fft.rfft, 'irfft': np.fft.irfft}
-for local_name, func in external_funcs.iteritems():
-    defun = "%s = decorators.generator(func)" % local_name
-    exec(defun)
 
 # @decorators.generator
 # def fft(frame, nfft=None, type='full'):
