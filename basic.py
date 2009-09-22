@@ -10,7 +10,8 @@ import scikits.samplerate as samplerate
 import decorators
 
 # import a bunch of numpy functions directly:
-external_funcs = {'abs': np.abs, 'log': np.log,
+external_funcs = {'abs': lambda x: np.abs(x),
+                  'square': np.square,
                   'real': np.real, 'imag': np.imag,
                   'diff': np.diff, 'flatten': lambda x: x.flatten(),
                   'fft': np.fft.fft, 'ifft': np.fft.ifft,
@@ -33,7 +34,7 @@ def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
 @decorators.generator
 def normalize(frame, ord=None):
     """Normalize each frame using a norm of the given order"""
-    return frame / np.linalg.norm(frame, ord)
+    return frame / (np.linalg.norm(frame, ord) + 1e-16)
 
 # this is slower than the implementation below which does not use the
 # @decorators.generator decorator
@@ -107,7 +108,7 @@ def framer(samples, nwin=512, nhop=None):
 def overlap_add(frames, nwin=512, nhop=None):
     """Perform overlap-add resynthesis of frames
 
-    Inverse of window()
+    Inverse of framer()
     """
     if not nhop:
         nhop = nwin
@@ -190,6 +191,9 @@ def dB(frame, minval=-100.0):
 def filterbank(fft_frame, fb):
     return np.dot(fb, fft_frame)
 
+@decorators.generator
+def log(frame, floor=-5.0):
+    return np.maximum(np.log(frame), floor)
 
 # compound feature extractors:
 
@@ -205,5 +209,8 @@ def istft(S, nfft, nwin=None, nhop=None, winfun=np.hanning):
 
 def logspec(samples, nfft, nwin=None, nhop=None, winfun=np.hanning):
     return dB(stft(samples, nfft, nwin, nhop, winfun))
+
+def powspec(samples, nfft, nwin=None, nhop=None, winfun=np.hanning):
+    return square(abs(stft(samples, nfft, nwin, nhop, winfun)))
 
 
