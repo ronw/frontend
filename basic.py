@@ -7,58 +7,51 @@ import scipy as sp
 
 import scikits.samplerate as samplerate
 
-import decorators
+from dataprocessor import DataProcessor, Pipeline
+from externaldps import *
 
-# import a bunch of numpy functions directly:
-external_funcs = {'abs': lambda x: np.abs(x),
-                  'square': np.square,
-                  'real': np.real, 'imag': np.imag,
-                  'diff': np.diff, 'flatten': lambda x: x.flatten(),
-                  'fft': np.fft.fft, 'ifft': np.fft.ifft,
-                  'rfft': np.fft.rfft, 'irfft': np.fft.irfft}
-for local_name, func in external_funcs.iteritems():
-    defun = "%s = decorators.generator(func)" % local_name
-    exec(defun)
-
-@decorators.generator
-def resample(frame, ratio=None, type='sinc_fastest', verbose=False):
+class Resample(DataProcessor):
     """Use scikits.samplerate
 
     For best results len(frame)*ratio should be an integer.  Its
     probably best to do this outside of the frontend
     """
-    if ratio is None:
-        return frame
-    return samplerate.resample(frame, ratio, type, verbose)
+    def __init__(self, ratio=None, type='sinc_fastest', verbose=False):
+        self.ratio = ratio
+        self.type = type
+        self.verbose = verbose
 
-@decorators.generator
-def normalize(frame, ord=None):
+    def process_frame(self, frame):
+        if self.ratio is None:
+            return frame
+        else:
+            return samplerate.resample(frame, self.ratio, self.type,
+                                       self.verbose)
+
+class Normalize(DataProcessor):
     """Normalize each frame using a norm of the given order"""
-    return frame / (np.linalg.norm(frame, ord) + 1e-16)
+    def __init__(self, ord=None):
+        self.ord = ord
 
-# this is slower than the implementation below which does not use the
-# @decorators.generator decorator
-#@decorators.generator
-#def tomono(frame):
-#    return sum(frame) / len(frame)
-#def tomono(frames):
-#    for frame in frames:
-#        yield sum(frame)/frame.shape[1]
-@decorators.generator
-def mono(frame):
-    if frame.ndim > 1:
-        mono_frame =  frame.mean(1)
-    else:
-        mono_frame = frame
-    return mono_frame
+    def process_frame(self, frame):
+        return frame / (np.linalg.norm(frame, self.ord) + 1e-16)
 
-@decorators.generator
-def preemphasize():  # or just filter()
+
+class Mono(DataProcessor):
+    def process_frame(self, frame):
+        if frame.ndim > 1:
+            mono_frame =  frame.mean(1)
+        else:
+            mono_frame = frame
+        return mono_frame
+
+
+def Preemphasize():  # or just filter()
     pass
 
 
 # essentially a simple buffer - works for matrices too... (really row features)
-def framer(samples, nwin=512, nhop=None):
+class Framer(DataProcessor):
     """open arbitrary audio file
     
     arguments should be in second (or ms) units, not samples (as they
@@ -66,151 +59,133 @@ def framer(samples, nwin=512, nhop=None):
     
     handles zero padding of final frames
     """
-    if not issubclass(samples.__class__, types.GeneratorType):
-        samples = (x for x in [samples])
+    def __init__(self, nwin, nhop=None):
+        self.nwin = nwin
+        if nhop is None:
+            nhop = nwin
+        self.nhop = nhop
+
+    def __iter__(self, samples):
+        if not issubclass(samples.__class__, types.GeneratorType):
+            samples = (x for x in [samples])
     
-    if not nhop:
-        nhop = nwin
-    # nhop cannot be less than 1 for normal behavior
-    noverlap = nwin - nhop
+        # nhop cannot be less than 1 for normal behavior
+        noverlap = self.nwin - self.nhop
 
-    buf = samples.next().copy()
-    while len(buf) < nwin:
-        buf = np.concatenate((buf, samples.next().copy()))
+        buf = samples.next().copy()
+        while len(buf) < self.nwin:
+            buf = np.concatenate((buf, samples.next().copy()))
       
-    frame = buf[:nwin]
-    buf = buf[nwin:]
+        frame = buf[:self.nwin]
+        buf = buf[self.nwin:]
 
-    while True:
-        yield frame
-        frame[:noverlap] = frame[nhop:]
+        while True:
+            yield frame
+            frame[:noverlap] = frame[self.nhop:]
+            
+            try:
+                while len(buf) < self.nhop:
+                    buf = np.concatenate((buf, samples.next().copy()))
+            except StopIteration:
+                break
+    
+            frame[noverlap:] = buf[:self.nhop]
+            buf = buf[self.nhop:]
 
-        try:
-            while len(buf) < nhop:
-                buf = np.concatenate((buf, samples.next().copy()))
-        except StopIteration:
-            break
+        # Read remaining few samples from file and yield the remaining
+        # zero padded frames.
+        frame[noverlap:noverlap + len(buf)] = buf
+        frame[noverlap + len(buf):] = 0
+        nremaining_frames = int(np.ceil((1.0*noverlap + len(buf)) / self.nhop))
 
-        frame[noverlap:] = buf[:nhop]
-        buf = buf[nhop:]
+        for n in range(nremaining_frames):
+            yield frame
+            frame[:noverlap] = frame[self.nhop:]
+            frame[noverlap:] = 0
 
-    # Read remaining few samples from file and yield the remaining
-    # zero padded frames.
-    frame[noverlap:noverlap + len(buf)] = buf
-    frame[noverlap + len(buf):] = 0
-    nremaining_frames = int(np.ceil((1.0*noverlap + len(buf)) / nhop))
 
-    for n in range(nremaining_frames):
-        yield frame
-        frame[:noverlap] = frame[nhop:]
-        frame[noverlap:] = 0
-
-def overlap_add(frames, nwin=512, nhop=None):
+class OverlapAdd(DataProcessor):
     """Perform overlap-add resynthesis of frames
 
-    Inverse of framer()
+    Inverse of Framer()
     """
-    if not nhop:
-        nhop = nwin
-    # nhop cannot be less than 1 for normal behavior
-    noverlap = nwin - nhop
 
-    buf = np.zeros(nwin)
-    for frame in frames:
-        buf += frame
-        yield buf[:nhop].copy()
-        buf[:noverlap] = buf[nhop:]
-        buf[noverlap:] = 0
+    def __init__(nwin=512, nhop=None):
+        self.nwin = nwin
+        if nhop is None:
+            nhop = nwin
+        self.nhop = nhop
 
-def window(frames, winfun=np.hanning):
-    win = None
-    for frame in frames:
-        if win is None:
-            win = winfun(len(frame))
-        yield win * frame
+    def __iter__(self, samples):
+        # nhop cannot be less than 1 for normal behavior
+        noverlap = nwin - nhop
 
-# @decorators.generator
-# def fft(frame, nfft=None, type='full'):
-#     """ Calculates the FFT of frame
+        buf = np.zeros(nwin)
+        for frame in frames:
+            buf += frame
+            yield buf[:nhop].copy()
+            buf[:noverlap] = buf[nhop:]
+            buf[noverlap:] = 0
 
-#     If type == 'full' returns the full fft including positive and
-#     negative frequencies.  If 'real' only include nonnegative
-#     frequencies.
-#     """
-#     if not nfft:
-#         nfft = len(frame)
-#     if type == 'full':
-#         tmp = np.fft.fft(frame, nfft)
-#     elif type == 'real':
-#         tmp = np.fft.rfft(frame, nfft)
-#     else:
-#         raise ValueError, "type must be 'full' or 'real'"
-#     return tmp
 
-# @decorators.generator
-# def ifft(frame, nfft=None, type='full'):
-#     """ Calculates the inverse FFT of frame
+class Window(DataProcessor):
+    def __init__(self, winfun=np.hanning):
+        self.winfun = winfun
 
-#     type should match that of the fft used to create frame.  If
-#     type == 'full' frame must contain 
-#     """
-#     if not nfft:
-#         nfft = len(frame)
-#     if type == 'full':
-#         tmp = np.fft.ifft(frame, nfft)
-#     elif type == 'real':
-#         tmp = np.fft.irfft(frame, nfft)
-#     else:
-#         raise ValueError, "type must be 'full' or 'real'"
-#     return tmp
+    def __iter__(self, frames):
+        win = None
+        for frame in frames:
+            if win is None:
+                win = self.winfun(len(frame))
+            yield win * frame
 
-    
-# @decorators.generator
-# def log(frame):
-#     return np.log(frame)
 
-# @decorators.generator
-# def abs(frame):
-#     return np.abs(frame)
+class RMS(DataProcessor):
+    def process_frame(self, frame):
+        return 20*np.log10(np.sqrt(np.mean(frame**2)))
 
-# @decorators.generator
-# def real(frame):
-#     return np.real(frame)
 
-# @decorators.generator
-# def imag(frame):
-#     return np.imag(frame)
+class DB(DataProcessor):
+    def __init__(self, minval=-100.0):
+        self.minval = minval
 
-@decorators.generator
-def dB(frame, minval=-100.0):
-    spectrum = 20*np.log10(np.abs(frame))
-    spectrum[spectrum < minval] = minval
-    return spectrum
+    def process_frame(self, frame):
+        spectrum = 20*np.log10(np.abs(frame))
+        spectrum[spectrum < self.minval] = self.minval
+        return spectrum
 
-@decorators.generator
-def filterbank(fft_frame, fb):
-    return np.dot(fb, fft_frame)
 
-@decorators.generator
-def log(frame, floor=-5.0):
-    return np.maximum(np.log(frame), floor)
+class Filterbank(DataProcessor):
+    def __init__(self, fb):
+        self.fb = fb
+        
+    def process_frame(self, frame):
+        return np.dot(self.fb, frame)
+
+
+class Log(DataProcessor):
+    def __init__(self, floor=-5.0):
+        self.floor = floor
+
+    def process_frame(self, frame):
+        return np.maximum(np.log(frame), self.floor)
 
 # compound feature extractors:
 
-def stft(samples, nfft, nwin=None, nhop=None, winfun=np.hanning):
-    if not nwin:
+def STFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    if nwin is None:
         nwin = nfft
-    return rfft(window(framer(samples, nwin, nhop), winfun), nfft)
+    return Pipeline(Framer(nwin, nhop), Window(winfun), RFFT(nfft))
 
-def istft(S, nfft, nwin=None, nhop=None, winfun=np.hanning):
-    if not nwin:
+def ISTFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    if nwin is None:
         nwin = nfft
-    return overlap_add(window(irfft(S, nfft), winfun), nwin, nhop)
+    return Pipeline(IRFFT(nfft), Window(winfun), OverlapAdd(nwin, nhop))
 
-def logspec(samples, nfft, nwin=None, nhop=None, winfun=np.hanning):
-    return dB(stft(samples, nfft, nwin, nhop, winfun))
+def LogSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    return Pipeline(STFT(nfft, nwin, nhop, winfun), DB())
 
-def powspec(samples, nfft, nwin=None, nhop=None, winfun=np.hanning):
-    return square(abs(stft(samples, nfft, nwin, nhop, winfun)))
+def PowSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    return Pipeline(STFT(nfft, nwin, nhop, winfun), Abs(), Square())
 
 

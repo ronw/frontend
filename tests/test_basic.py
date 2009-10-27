@@ -1,25 +1,24 @@
 #!/usr/bin/env python
 
-"""Tests for feature extraction generators."""
-
 import unittest
 
-import numpy
-
+import numpy as np
 from numpy.testing import *
 
-from generators import *
+from dataprocessor import Pipeline
+import basic
 
-class TestAudioFile(unittest.TestCase):
+class TestAudioSource(unittest.TestCase):
     def test_audio_source(self):
         pass
 
 class TestFramer(unittest.TestCase):
     def _test_framer(self, n, nbuf, nwin, nhop):
-        samples = numpy.arange(n)
-        frames = framer(audio_source(samples, nbuf=nbuf), nwin, nhop)
+        samples = np.arange(n)
+        frames = Pipeline(basic.AudioSource(samples, nbuf=nbuf),
+                          basic.Framer(nwin, nhop))
 
-        nframes = int(numpy.ceil(1.0 * len(samples) / nhop))
+        nframes = int(np.ceil(1.0 * len(samples) / nhop))
         for x in range(nframes):
             curr_frame = frames.next()
             
@@ -29,7 +28,7 @@ class TestFramer(unittest.TestCase):
                 # Make sure zero padding is correct.
                 curr_samples = samples[x*nhop:].copy()
                 nsamples = len(curr_samples)
-                curr_samples = numpy.concatenate((curr_samples,
+                curr_samples = np.concatenate((curr_samples,
                                                   [0] * (nwin - nsamples)))
 
             assert_array_equal(curr_frame, curr_samples)
@@ -53,13 +52,13 @@ class TestSimpleComponents(unittest.TestCase):
     def test_tomono(self):
         nsamp = 1000
         nbuf = 10
-        frames = numpy.random.rand(nsamp, 2)
+        frames = np.random.rand(nsamp, 2)
 
         gen = audio_source(frames, nbuf=nbuf)
-        stereo_frames = numpy.array([x for x in gen])
+        stereo_frames = np.array([x for x in gen])
 
         gen = tomono(audio_source(frames, nbuf=nbuf))
-        mono_frames = numpy.array([x for x in gen])
+        mono_frames = np.array([x for x in gen])
 
         self.assert_(stereo_frames.shape != mono_frames.shape)
         self.assertEqual(mono_frames.shape, (nsamp/nbuf, nbuf))
@@ -68,11 +67,11 @@ class TestSimpleComponents(unittest.TestCase):
         nsamp = 1024
         nfft = 32;
         for nbuf in [8, 16, 32]:
-            samples = numpy.random.rand(nsamp)
-            frames = numpy.array([x for x in audio_source(samples, nbuf=nbuf)])
+            samples = np.random.rand(nsamp)
+            frames = np.array([x for x in audio_source(samples, nbuf=nbuf)])
 
             gen = ifft(fft(audio_source(samples, nbuf=nbuf), nfft), nfft)
-            test_frames = numpy.array([x for x in gen])
+            test_frames = np.array([x for x in gen])
 
             assert_array_almost_equal(frames, test_frames[:,:nbuf])
 

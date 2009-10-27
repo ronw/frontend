@@ -1,50 +1,16 @@
 import numpy as np
 import scipy as sp
 
+from dataprocessor import DataProcessor, Pipeline
 import basic
-import decorators
 
-@decorators.generator
-def delta(n=1):
-    pass
 
-@decorators.generator
-def stack(num_incoming):
-    pass
-
-def dct(frames, ndct):
-    """Compute DCT (type 3)
-
-    Eventually this will come from scipy (ver 0.8).
-    """
-    frame = frames.next()
-    nrow = len(frame)
-
-    DCT = np.empty((ndct, nrow))
-    for i in xrange(ndct):
-        DCT[i,:] = (np.cos(i*np.arange(1, 2 * nrow, 2) / (2.0 * nrow) * np.pi)
-                    * np.sqrt(2.0 / nrow))
-    yield np.dot(DCT, frame)
-
-    for frame in frames:
-        yield np.dot(DCT, frame)
-        
-
-def mfcc(samples, samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
-         nmel=40, width=1.0, fmin=0, fmax=None, ndct=13):
-    return dct(basic.log(melspec(samples, samplerate, nfft, nwin, nhop, 
-                                 winfun, nmel, width, fmin, fmax)),  ndct)
-
-def melspec(samples, samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
+def MelSpec(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
          nmel=40, width=1.0, fmin=0, fmax=None):
     FB = melfb(samplerate, nfft, nmel, width, fmin, fmax) 
-    return basic.filterbank(basic.powspec(samples, nfft, nwin, nhop, winfun),
-                            FB)
+    return Pipeline(basic.PowSpec(nfft, nwin, nhop, winfun),
+                    basic.Filterbank(FB))
 
-@decorators.generator
-def mfcc_d_a():
-    s = stack(3)
-    mfcc(broadcast(nop(s), delta(broadcast(nop(s), delta(s)))))
 
 def _hz_to_mel(f):
     return 2595.0 * np.log10(1 + f / 700.0)
@@ -82,3 +48,42 @@ def melfb(samplerate, nfft, nfilts=40, width=1.0, fmin=0, fmax=None):
     #wts = np.dot(np.diag(enorm), wts)
     
     return wts
+
+
+def dctfb(ndct, nrow):
+    """ Create a DCT (type 3) matrix """
+    DCT = np.empty((ndct, nrow))
+    for i in xrange(ndct):
+        DCT[i,:] = (np.cos(i*np.arange(1, 2*nrow, 2) / (2.0*nrow) * np.pi)
+                    * np.sqrt(2.0 / nrow))
+    return DCT
+
+
+def MFCC(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
+         nmel=40, width=1.0, fmin=0, fmax=None, ndct=13):
+    DCT = dctfb(ndct, nmel)
+    return Pipeline(MelSpec(samplerate, nfft, nwin, nhop, winfun, nmel, width,
+                            fmin, fmax),
+                    basic.Log(),
+                    basic.Filterbank(DCT))
+
+
+class Stack(DataProcessor):
+    def __init__(self, *dps):
+        self.dps = dps
+
+    def process_frame(self, frame):
+        output = []
+        for dp in self.dps:
+            output.append(dp.process_frame(frame))
+        return np.asarray(output)
+
+
+class Delta(DataProcessor):
+    def __init__(self):
+        pass
+
+# def mfcc_d_a():
+#     s = stack(3)
+#     mfcc(broadcast(nop(s), delta(broadcast(nop(s), delta(s)))))
+

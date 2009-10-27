@@ -1,21 +1,21 @@
 import numpy as np
 import scipy as sp
 
+from dataprocessor import DataProcessor, Pipeline
 import basic
-import decorators
 
 def _hz2octs(freq, A440):
     return np.log2(freq / (A440 / 16.0))
 
-@decorators.generator
-def pickpeaks(frame):
-    # Keep only local maxes in freq
-    #Dm = (D > D([1,[1:nr-1]],:)) & (D >= D([[2:nr],nr],:));
-    lowidx  = np.concatenate(([0], range(len(frame) - 1)))
-    highidx = np.concatenate((range(1, len(frame)), [len(frame) - 1]))
-    localmax = np.logical_and(frame > frame[lowidx],
-                              frame >= frame[highidx])
-    return frame * localmax
+class PickPeaks(DataProcessor):
+    def process_frame(self, frame):
+        # Keep only local maxes in freq
+        #Dm = (D > D([1,[1:nr-1]],:)) & (D >= D([[2:nr],nr],:));
+        lowidx  = np.concatenate(([0], range(len(frame) - 1)))
+        highidx = np.concatenate((range(1, len(frame)), [len(frame) - 1]))
+        localmax = np.logical_and(frame > frame[lowidx],
+                                  frame >= frame[highidx])
+        return frame * localmax
 
 def constantqfb(fs, nfft, fmin, fmax, bpo=12):
     """
@@ -52,19 +52,24 @@ def constantqfb(fs, nfft, fmin, fmax, bpo=12):
         kernel[k] = np.fft.rfft(tempkernel)
     return kernel / nfft
 
-@decorators.generator
-def constantq_to_chroma(cqframe, bpo=12):
-    hpcp = np.zeros(bpo)
-    for n in xrange(0, len(cqframe), bpo):
-        cqoct = cqframe[n:n+bpo]
-        hpcp[:len(cqoct)] += cqoct
-    return hpcp
+class ConstantQToChroma(DataProcessor):
+    def __init__(self, bpo=12):
+        self.bpo = bpo
+        
+    def process_frame(self, cqframe):
+        hpcp = np.zeros(self.bpo)
+        for n in xrange(0, len(cqframe), self.bpo):
+            cqoct = cqframe[n:n+self.bpo]
+            hpcp[:len(cqoct)] += cqoct
+        return hpcp
 
-def cqchroma(samples, fs, nfft, nwin=None, nhop=None, winfun=np.hamming,
+def CQChroma(fs, nfft, nwin=None, nhop=None, winfun=np.hamming,
              nchroma=12, fmin=55.0, fmax=587.36):
     CQ = constantqfb(fs, nfft, fmin, fmax, nchroma)
-    return constantq_to_chroma(basic.abs(basic.filterbank(
-        basic.stft(samples, nfft, nwin, nhop, winfun), CQ)), nchroma)
+    return Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
+                    basic.Filterbank(CQ),
+                    basic.Abs(),
+                    ConstantQToChroma(nchroma))
 
 def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     """
@@ -114,16 +119,22 @@ def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     # remove aliasing columns
     return wts[:,:nfft/2+1]
 
-def chroma(samples, fs, nfft, nwin=None, nhop=None, winfun=np.hamming, nchroma=12, center=1000, sd=1):
+def Chroma(fs, nfft, nwin=None, nhop=None, winfun=np.hamming, nchroma=12,
+           center=1000, sd=1):
     A0 = 27.5  # Hz
     A440 = 440 # Hz
     f_ctr_log = np.log2(center/A0)
     CM = chromafb(nfft, nchroma, fs, A440, f_ctr_log, sd)
 
-    return basic.filterbank(pickpeaks(
-        basic.abs(basic.stft(samples, nfft, nwin, nhop, winfun))), CM)
+    return Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
+                    basic.Abs(),
+                    PickPeaks(),
+                    basic.Filterbank(CM))
 
-@decorators.generator
-def circularshift(frame, nshift=0):
-    return frame[np.r_[nshift:len(frame), :nshift]]
+class CircularShift(DataProcessor):
+    def __init__(self, nshift=0):
+        self.nshift = nshift
+        
+    def process_frame(self, frame):
+        return frame[np.r_[self.nshift:len(frame), :self.nshift]]
 

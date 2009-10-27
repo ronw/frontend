@@ -1,39 +1,46 @@
 import numpy as np
 
 import scikits.audiolab as audiolab
+
+from dataprocessor import DataProcessor, Source
 from mock_sndfile import MockSndfile
 
-__all__ = ['audio_source']
+class AudioSource(Source):
+    """ Reads samples from an audio file (or array)
 
-##########
-# Sources
-def audio_source(filename, start=0, end=None, nbuf=None):
-    """ Returns a generator that returns sequential lists of nbuf samples
-
-    
+    Returns a generator that returns sequential lists of nbuf samples
     arguments should be in second (or ms) units, not samples (as they
     are now)
     """
-    if isinstance(filename, str):
-        f = audiolab.Sndfile(filename)
-    elif np.iterable(filename):
-        f = MockSndfile(filename)
-    else:
-        raise ValueError, 'Invalid filename: %s' % filename
+    def __init__(self, filename, start=0, end=None, nbuf=None):
+        self.filename = filename
+        self.start = start
+        self.end = end
+        self.nbuf = nbuf
 
-    if not end:
-        end = f.nframes
-    if not nbuf:
-        nbuf = 10*f.samplerate
+    def __iter__(self):
+        if isinstance(self.filename, str):
+            f = audiolab.Sndfile(self.filename)
+        elif np.iterable(self.filename):
+            f = MockSndfile(self.filename, samplerate=44100)
+        else:
+            raise ValueError, 'Invalid filename: %s' % self.filename
 
-    pos = f.seek(start)
-    nremaining = end - pos
-    while nremaining > 0:
-        if nremaining < nbuf:
-            nbuf = nremaining
-        try:
-            yield f.read_frames(nbuf)
-            nremaining -= nbuf 
-        except RuntimeError:
-            nremaining = 0
-    f.close()
+        nbuf = self.nbuf
+        end = self.end
+        if not end:
+            end = f.nframes
+        if not nbuf:
+            nbuf = 10*f.samplerate
+
+        pos = f.seek(self.start)
+        nremaining = end - pos
+        while nremaining > 0:
+            if nremaining < nbuf:
+                nbuf = nremaining
+            try:
+                yield f.read_frames(nbuf)
+                nremaining -= nbuf 
+            except RuntimeError:
+                nremaining = 0
+        f.close()

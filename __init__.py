@@ -1,55 +1,42 @@
-# Copyright (C) 2009 Ron J. Weiss (ronweiss@gmail.com)
+import inspect
+
+from dataprocessor import *
+from sources import *
+from basic import *
+from chroma import *
+from mfcc import *
+dps = locals().copy()
+
+
+# All DataProcessors will also be available as standalone functions.
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# Naming convention:
+# CamelCase for classes/generators to be used in a Pipeline lowercase
+# for standalone functions.
 
-"""
-frontend: Audio feature extraction API
+def _dataprocessor_to_function(dpcls):
+    def fun(frames, *args, **kwargs):
+        dp = dpcls(*args, **kwargs)
+        return np.asarray([x for x in dp.__iter__(frames)])
+    return fun
 
-Makes extensive use of generator pipelines.
-Construct pipelines of feature extractors.
+def _source_to_function(dpcls):
+    def fun(*args, **kwargs):
+        dp = dpcls(*args, **kwargs)
+        return np.asarray([x for x in dp])
+    return fun
 
-The most common usage of this module will be through the pipeline()
-function (or one of the predefined piplelines) which is used to string
-together a set of generators to create compound feature extractors as
-follows:
+__all__ = []
+for clsname, cls in dps.iteritems():
+    if ((not clsname[0].isupper())
+        or (not inspect.isclass(cls) and not inspect.isfunction(cls))):
+        continue
 
-  feat = pipeline(framer('path/to/file', nwin=100),
-                  tomono(),
-                  preemphasize(),
-                  window(hamming),
-                  fft(),
-                  abs())
-  
-Many feature extraction function have an additional form which allows
-it to be called on its own.  For example, the fun() generator might
-also have a standalone form, standalone.fun().
-"""
+    funname = clsname.lower()
+    if issubclass(cls, Source):
+        exec('%s = _source_to_function(%s)' % (funname, clsname))
+    else:
+        exec('%s = _dataprocessor_to_function(%s)' % (funname, clsname))
 
-__author__ = "Ron J. Weiss <ronweiss@gmail.com>"
-__version__ = "0.1"
-
-
-# requirement: Each pipeline generator must create consistent outputs
-# - the dimensionality cannot change mid-stream.  Generators do not
-# need to output something for every input it receives (i.e. could
-# have a VAD generator that only passes through frames it thinks
-# contain speech)
-
-#from version import version as _version
-#__version__ = _version
-
-from frontend import *
-
-#__all__ = filter(lambda s: not s.startswith('_'), dir())
-
+    __all__.append(clsname)
+    __all__.append(funname)
