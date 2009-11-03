@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import unittest
 
 import numpy as np
@@ -8,25 +7,21 @@ from numpy.testing import *
 from dataprocessor import Pipeline
 import basic
 
-class TestAudioSource(unittest.TestCase):
-    def test_audio_source(self):
-        pass
 
 class TestFramer(unittest.TestCase):
     def _test_framer(self, n, nbuf, nwin, nhop):
         samples = np.arange(n)
-        frames = Pipeline(basic.AudioSource(samples, nbuf=nbuf),
-                          basic.Framer(nwin, nhop))
+        frames = basic.Framer(nwin, nhop).process_sequence(samples)
 
         nframes = int(np.ceil(1.0 * len(samples) / nhop))
         for x in range(nframes):
             curr_frame = frames.next()
             
             if x * nhop + nwin < len(samples):
-                curr_samples = samples[x * nhop : x * nhop + nwin].copy()
+                curr_samples = samples[x * nhop : x * nhop + nwin]
             else:
                 # Make sure zero padding is correct.
-                curr_samples = samples[x*nhop:].copy()
+                curr_samples = samples[x*nhop:]
                 nsamples = len(curr_samples)
                 curr_samples = np.concatenate((curr_samples,
                                                   [0] * (nwin - nsamples)))
@@ -48,44 +43,75 @@ class TestFramer(unittest.TestCase):
         self._test_framer(500, 101, 23, 7)
 
 
+class TestOverlapAdd(unittest.TestCase):
+    def test_framer_overlapadd(self, n=102400, nwin=1025, nhop=256):
+        """
+
+        nwin must be odd and nhop must be (nwin - 1) / 4 for
+        perfect reconstruction with a hanning window."""
+        #samples = np.random.rand(n)
+        #samples = np.arange(n)
+        samples = np.sin(2*np.pi * np.arange(0, n) * 1e-3)
+        frames = np.asarray(
+            [x for x in basic.Framer(nwin, nhop).process_sequence(samples)])
+
+        output_frames = Pipeline(frames,
+                                 basic.Window(),
+                                 basic.Window(),
+                                 basic.OverlapAdd(nwin, nhop)).toarray()
+        
+        # Chop off first and last few frames to ignore partial window effects.
+        skipframes = (nwin - nhop) / nhop
+        start = nhop*skipframes
+        end = len(samples) - start
+        assert_array_almost_equal(samples[start:end] * 1.5,
+                                  output_frames.flatten()[start:end], decimal=2)
+
+
 class TestSimpleComponents(unittest.TestCase):
-    def test_tomono(self):
+    def test_mono(self):
         nsamp = 1000
-        nbuf = 10
-        frames = np.random.rand(nsamp, 2)
+        nframes = 10
+        stereo_frames = np.random.rand(nframes, nsamp/nframes, 2)
 
-        gen = audio_source(frames, nbuf=nbuf)
-        stereo_frames = np.array([x for x in gen])
-
-        gen = tomono(audio_source(frames, nbuf=nbuf))
+        gen = basic.Mono().process_sequence(stereo_frames)
         mono_frames = np.array([x for x in gen])
 
         self.assert_(stereo_frames.shape != mono_frames.shape)
-        self.assertEqual(mono_frames.shape, (nsamp/nbuf, nbuf))
+        self.assertEqual(mono_frames.shape, (nframes, nsamp/nframes))
 
-    def test_fft_ifft(self):
+    def test_fft_ifft_perfect_reconstruction(self):
         nsamp = 1024
-        nfft = 32;
+        nfft = 32
         for nbuf in [8, 16, 32]:
-            samples = np.random.rand(nsamp)
-            frames = np.array([x for x in audio_source(samples, nbuf=nbuf)])
+            frames = np.random.rand(nsamp/nbuf, nbuf)
 
-            gen = ifft(fft(audio_source(samples, nbuf=nbuf), nfft), nfft)
+            gen = basic.IFFT(nfft).process_sequence(
+                basic.FFT(nfft).process_sequence(frames))
             test_frames = np.array([x for x in gen])
 
             assert_array_almost_equal(frames, test_frames[:,:nbuf])
 
-    def test_delta(self):
-        pass
-    def test_stft(self):
-        pass
-    def test_mfcc(self):
-        pass
-    def test_mfcc_d_a(self):
-        pass
 
+class TestCompoundFeatures(unittest.TestCase):
+    def test_stft_istft_perfect_reconstruction(self, n=102400, nwin=1025,
+                                               nhop=256, winfun=np.hanning):
+        samples = np.random.rand(n)
+        #samples = np.arange(n)
+        #samples = np.sin(2*np.pi * np.arange(0, n) * 1e-3)
+
+        output_frames = Pipeline(
+            samples, basic.STFT(nwin, nhop=nhop, winfun=winfun),
+            basic.ISTFT(nwin, nhop=nhop, winfun=winfun)).toarray()
+
+        # Chop off first and last few frames to ignore partial window effects.
+        skipframes = (nwin - nhop) / nhop
+        start = nhop*skipframes
+        end = len(samples) - start
+        assert_array_almost_equal(
+            samples[start:-start] * 1.5,
+            output_frames.flatten()[start:end])
 
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -7,7 +7,7 @@ import scipy as sp
 
 import scikits.samplerate as samplerate
 
-from dataprocessor import DataProcessor, Pipeline
+from dataprocessor import DataProcessor, Source, Pipeline
 from externaldps import *
 
 class Resample(DataProcessor):
@@ -28,6 +28,7 @@ class Resample(DataProcessor):
             return samplerate.resample(frame, self.ratio, self.type,
                                        self.verbose)
 
+
 class Normalize(DataProcessor):
     """Normalize each frame using a norm of the given order"""
     def __init__(self, ord=None):
@@ -46,7 +47,7 @@ class Mono(DataProcessor):
         return mono_frame
 
 
-def Preemphasize():  # or just filter()
+class Preemphasize(DataProcessor):  # or just filter()
     pass
 
 
@@ -65,8 +66,9 @@ class Framer(DataProcessor):
             nhop = nwin
         self.nhop = nhop
 
-    def __iter__(self, samples):
-        if not issubclass(samples.__class__, types.GeneratorType):
+    def process_sequence(self, samples):
+        # Is samples a list instead of a generator?
+        if not 'next' in dir(samples):
             samples = (x for x in [samples])
     
         # nhop cannot be less than 1 for normal behavior
@@ -74,18 +76,18 @@ class Framer(DataProcessor):
 
         buf = samples.next().copy()
         while len(buf) < self.nwin:
-            buf = np.concatenate((buf, samples.next().copy()))
+            buf = np.concatenate((buf, samples.next()))
       
         frame = buf[:self.nwin]
         buf = buf[self.nwin:]
 
         while True:
-            yield frame
+            yield frame.copy()
             frame[:noverlap] = frame[self.nhop:]
             
             try:
                 while len(buf) < self.nhop:
-                    buf = np.concatenate((buf, samples.next().copy()))
+                    buf = np.concatenate((buf, samples.next()))
             except StopIteration:
                 break
     
@@ -98,41 +100,47 @@ class Framer(DataProcessor):
         frame[noverlap + len(buf):] = 0
         nremaining_frames = int(np.ceil((1.0*noverlap + len(buf)) / self.nhop))
 
-        for n in range(nremaining_frames):
-            yield frame
+        for n in xrange(nremaining_frames):
+            yield frame.copy()
             frame[:noverlap] = frame[self.nhop:]
             frame[noverlap:] = 0
 
 
 class OverlapAdd(DataProcessor):
-    """Perform overlap-add resynthesis of frames
+    """Perform overlap-add resynthesis
 
     Inverse of Framer()
     """
 
-    def __init__(nwin=512, nhop=None):
+    def __init__(self, nwin=512, nhop=None):
         self.nwin = nwin
         if nhop is None:
             nhop = nwin
         self.nhop = nhop
 
-    def __iter__(self, samples):
+    def process_sequence(self, frames):
         # nhop cannot be less than 1 for normal behavior
-        noverlap = nwin - nhop
+        noverlap = self.nwin - self.nhop
 
-        buf = np.zeros(nwin)
+        # off by one error somewhere here
+        buf = np.zeros(self.nwin)
         for frame in frames:
             buf += frame
-            yield buf[:nhop].copy()
-            buf[:noverlap] = buf[nhop:]
+            yield buf[:self.nhop].copy()
+            buf[:noverlap] = buf[self.nhop:]
             buf[noverlap:] = 0
+
+        nremaining_frames = int(noverlap / self.nhop) - 1
+        for n in range(nremaining_frames):
+            yield buf[:self.nhop].copy()
+            buf[:noverlap] = buf[self.nhop:]
 
 
 class Window(DataProcessor):
     def __init__(self, winfun=np.hanning):
         self.winfun = winfun
 
-    def __iter__(self, frames):
+    def process_sequence(self, frames):
         win = None
         for frame in frames:
             if win is None:
@@ -155,6 +163,11 @@ class DB(DataProcessor):
         return spectrum
 
 
+class IDB(DataProcessor):
+    def process_frame(self, frame):
+        return 10.0 ** (frame / 20)
+
+
 class Filterbank(DataProcessor):
     def __init__(self, fb):
         self.fb = fb
@@ -169,6 +182,7 @@ class Log(DataProcessor):
 
     def process_frame(self, frame):
         return np.maximum(np.log(frame), self.floor)
+
 
 # compound feature extractors:
 
@@ -187,5 +201,3 @@ def LogSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
 
 def PowSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
     return Pipeline(STFT(nfft, nwin, nhop, winfun), Abs(), Square())
-
-

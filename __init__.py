@@ -5,7 +5,7 @@ from sources import *
 from basic import *
 from chroma import *
 from mfcc import *
-dps = locals().copy()
+alldps = locals().copy()
 
 
 # All DataProcessors will also be available as standalone functions.
@@ -17,7 +17,7 @@ dps = locals().copy()
 def _dataprocessor_to_function(dpcls):
     def fun(frames, *args, **kwargs):
         dp = dpcls(*args, **kwargs)
-        return np.asarray([x for x in dp.__iter__(frames)])
+        return np.asarray([x for x in dp.process_sequence(frames)])
     return fun
 
 def _source_to_function(dpcls):
@@ -27,7 +27,7 @@ def _source_to_function(dpcls):
     return fun
 
 __all__ = []
-for clsname, cls in dps.iteritems():
+for clsname, cls in alldps.iteritems():
     if ((not clsname[0].isupper())
         or (not inspect.isclass(cls) and not inspect.isfunction(cls))):
         continue

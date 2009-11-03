@@ -8,8 +8,7 @@ import numpy
 
 from numpy.testing import *
 
-from frontend import mock_sndfile
-MockSndfile = mock_sndfile.MockSndfile
+from mock_sndfile import MockSndfile
 
 class TestMockSndfile(unittest.TestCase):
     def test_channels(self):

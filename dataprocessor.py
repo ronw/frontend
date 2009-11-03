@@ -7,9 +7,9 @@ class DataProcessor(object):
     # (the default implementation of the other will handle the other
     # case).
     def process_frame(self, frame):
-        return self.__iter__([frame]).next()
+        return self.process_sequence([frame]).next()
 
-    def __iter__(self, frames):
+    def process_sequence(self, frames):
         for x in frames:
             yield self.process_frame(x)
 
@@ -30,16 +30,21 @@ class Pipeline(DataProcessor):
     def __init__(self, *dps):
         self.dps = dps
 
-    def __iter__(self, frames=None):
+    def __iter__(self):
+        return self.process_sequence()
+
+    def process_sequence(self, frames=None):
         if frames is None:
-            gen = self.dps[0].__iter__()
+            gen = self.dps[0]
+            if issubclass(gen.__class__, Source):
+                gen = iter(gen)
         else:
-            gen = self.dps[0].__iter__(frames)
+            gen = self.dps[0].process_sequence(frames)
 
         for dp in self.dps[1:]:
-            gen = dp.__iter__(gen)
+            gen = dp.process_sequence(gen)
 
         return gen
 
     def toarray(self, frames=None):
-        return np.asarray([x for x in self.__iter__(frames)])
+        return np.asarray([x for x in self.process_sequence(frames)])
