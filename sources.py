@@ -2,10 +2,10 @@ import numpy as np
 
 import scikits.audiolab as audiolab
 
-from dataprocessor import DataProcessor, Source
+import dataprocessor
 from mock_sndfile import MockSndfile
 
-class AudioSource(Source):
+class AudioSource(dataprocessor.Source):
     """ Reads samples from an audio file (or array)
 
     Returns a generator that returns sequential lists of nbuf samples

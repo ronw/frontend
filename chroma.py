@@ -1,12 +1,12 @@
 import numpy as np
 
-from dataprocessor import DataProcessor, Pipeline
 import basic
+import dataprocessor
 
 def _hz2octs(freq, A440):
     return np.log2(freq / (A440 / 16.0))
 
-class PickPeaks(DataProcessor):
+class PickPeaks(dataprocessor.DataProcessor):
     def process_frame(self, frame):
         # Keep only local maxes in freq
         #Dm = (D > D([1,[1:nr-1]],:)) & (D >= D([[2:nr],nr],:));
@@ -51,7 +51,7 @@ def constantqfb(fs, nfft, fmin, fmax, bpo=12):
         kernel[k] = np.fft.rfft(tempkernel)
     return kernel / nfft
 
-class ConstantQToChroma(DataProcessor):
+class ConstantQToChroma(dataprocessor.DataProcessor):
     def __init__(self, bpo=12):
         self.bpo = bpo
         
@@ -65,10 +65,10 @@ class ConstantQToChroma(DataProcessor):
 def CQChroma(fs, nfft, nwin=None, nhop=None, winfun=np.hamming,
              nchroma=12, fmin=55.0, fmax=587.36):
     CQ = constantqfb(fs, nfft, fmin, fmax, nchroma)
-    return Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
-                    basic.Filterbank(CQ),
-                    basic.Abs(),
-                    ConstantQToChroma(nchroma))
+    return dataprocessor.Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
+                                  basic.Filterbank(CQ),
+                                  basic.Abs(),
+                                  ConstantQToChroma(nchroma))
 
 def chromafb(nfft, nbin, samplerate, A440=440.0, ctroct=5.0, octwidth=0):
     """
@@ -125,12 +125,12 @@ def Chroma(fs, nfft, nwin=None, nhop=None, winfun=np.hamming, nchroma=12,
     f_ctr_log = np.log2(center/A0)
     CM = chromafb(nfft, nchroma, fs, A440, f_ctr_log, sd)
 
-    return Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
-                    basic.Abs(),
-                    PickPeaks(),
-                    basic.Filterbank(CM))
+    return dataprocessor.Pipeline(basic.STFT(nfft, nwin, nhop, winfun),
+                                  basic.Abs(),
+                                  PickPeaks(),
+                                  basic.Filterbank(CM))
 
-class CircularShift(DataProcessor):
+class CircularShift(dataprocessor.DataProcessor):
     def __init__(self, nshift=0):
         self.nshift = nshift
         

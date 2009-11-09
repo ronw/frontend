@@ -1,11 +1,11 @@
-import inspect
-
-from dataprocessor import *
 from sources import *
 from basic import *
 from chroma import *
 from mfcc import *
 alldps = locals().copy()
+
+import inspect
+from dataprocessor import *
 
 
 # All DataProcessors will also be available as standalone functions.

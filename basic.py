@@ -7,10 +7,10 @@ import scipy as sp
 
 import scikits.samplerate as samplerate
 
-from dataprocessor import DataProcessor, Source, Pipeline
+import dataprocessor
 from externaldps import *
 
-class Resample(DataProcessor):
+class Resample(dataprocessor.DataProcessor):
     """Use scikits.samplerate
 
     For best results len(frame)*ratio should be an integer.  Its
@@ -29,7 +29,7 @@ class Resample(DataProcessor):
                                        self.verbose)
 
 
-class Normalize(DataProcessor):
+class Normalize(dataprocessor.DataProcessor):
     """Normalize each frame using a norm of the given order"""
     def __init__(self, ord=None):
         self.ord = ord
@@ -38,7 +38,7 @@ class Normalize(DataProcessor):
         return frame / (np.linalg.norm(frame, self.ord) + 1e-16)
 
 
-class Mono(DataProcessor):
+class Mono(dataprocessor.DataProcessor):
     def process_frame(self, frame):
         if frame.ndim > 1:
             mono_frame =  frame.mean(1)
@@ -47,12 +47,12 @@ class Mono(DataProcessor):
         return mono_frame
 
 
-class Preemphasize(DataProcessor):  # or just filter()
+class Preemphasize(dataprocessor.DataProcessor):  # or just filter()
     pass
 
 
 # essentially a simple buffer - works for matrices too... (really row features)
-class Framer(DataProcessor):
+class Framer(dataprocessor.DataProcessor):
     """open arbitrary audio file
     
     arguments should be in second (or ms) units, not samples (as they
@@ -106,7 +106,7 @@ class Framer(DataProcessor):
             frame[noverlap:] = 0
 
 
-class OverlapAdd(DataProcessor):
+class OverlapAdd(dataprocessor.DataProcessor):
     """Perform overlap-add resynthesis
 
     Inverse of Framer()
@@ -136,7 +136,7 @@ class OverlapAdd(DataProcessor):
             buf[:noverlap] = buf[self.nhop:]
 
 
-class Window(DataProcessor):
+class Window(dataprocessor.DataProcessor):
     def __init__(self, winfun=np.hanning):
         self.winfun = winfun
 
@@ -148,12 +148,12 @@ class Window(DataProcessor):
             yield win * frame
 
 
-class RMS(DataProcessor):
+class RMS(dataprocessor.DataProcessor):
     def process_frame(self, frame):
         return 20*np.log10(np.sqrt(np.mean(frame**2)))
 
 
-class DB(DataProcessor):
+class DB(dataprocessor.DataProcessor):
     def __init__(self, minval=-100.0):
         self.minval = minval
 
@@ -163,12 +163,12 @@ class DB(DataProcessor):
         return spectrum
 
 
-class IDB(DataProcessor):
+class IDB(dataprocessor.DataProcessor):
     def process_frame(self, frame):
         return 10.0 ** (frame / 20)
 
 
-class Filterbank(DataProcessor):
+class Filterbank(dataprocessor.DataProcessor):
     def __init__(self, fb):
         self.fb = fb
         
@@ -176,7 +176,7 @@ class Filterbank(DataProcessor):
         return np.dot(self.fb, frame)
 
 
-class Log(DataProcessor):
+class Log(dataprocessor.DataProcessor):
     def __init__(self, floor=-5.0):
         self.floor = floor
 
@@ -189,15 +189,18 @@ class Log(DataProcessor):
 def STFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
     if nwin is None:
         nwin = nfft
-    return Pipeline(Framer(nwin, nhop), Window(winfun), RFFT(nfft))
+    return dataprocessor.Pipeline(Framer(nwin, nhop), Window(winfun),
+                                  RFFT(nfft))
 
 def ISTFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
     if nwin is None:
         nwin = nfft
-    return Pipeline(IRFFT(nfft), Window(winfun), OverlapAdd(nwin, nhop))
+    return dataprocessor.Pipeline(IRFFT(nfft), Window(winfun),
+                                  OverlapAdd(nwin, nhop))
 
 def LogSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
-    return Pipeline(STFT(nfft, nwin, nhop, winfun), DB())
+    return dataprocessor.Pipeline(STFT(nfft, nwin, nhop, winfun), DB())
 
 def PowSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
-    return Pipeline(STFT(nfft, nwin, nhop, winfun), Abs(), Square())
+    return dataprocessor.Pipeline(STFT(nfft, nwin, nhop, winfun), Abs(),
+                                  Square())

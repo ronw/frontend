@@ -1,15 +1,14 @@
 import numpy as np
 import scipy as sp
 
-from dataprocessor import DataProcessor, Pipeline
 import basic
-
+import dataprocessor
 
 def MelSpec(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
          nmel=40, width=1.0, fmin=0, fmax=None):
     FB = melfb(samplerate, nfft, nmel, width, fmin, fmax) 
-    return Pipeline(basic.PowSpec(nfft, nwin, nhop, winfun),
-                    basic.Filterbank(FB))
+    return dataprocessor.Pipeline(basic.PowSpec(nfft, nwin, nhop, winfun),
+                                  basic.Filterbank(FB))
 
 
 def _hz_to_mel(f):
@@ -62,13 +61,13 @@ def dctfb(ndct, nrow):
 def MFCC(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
          nmel=40, width=1.0, fmin=0, fmax=None, ndct=13):
     DCT = dctfb(ndct, nmel)
-    return Pipeline(MelSpec(samplerate, nfft, nwin, nhop, winfun, nmel, width,
-                            fmin, fmax),
-                    basic.Log(),
-                    basic.Filterbank(DCT))
+    return dataprocessor.Pipeline(
+        MelSpec(samplerate, nfft, nwin, nhop, winfun, nmel, width, fmin, fmax),
+        basic.Log(),
+        basic.Filterbank(DCT))
 
 
-class Stack(DataProcessor):
+class Stack(dataprocessor.DataProcessor):
     def __init__(self, *dps):
         self.dps = dps
 
@@ -79,7 +78,7 @@ class Stack(DataProcessor):
         return np.asarray(output)
 
 
-class Delta(DataProcessor):
+class Delta(dataprocessor.DataProcessor):
     def __init__(self):
         pass
 

@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from dataprocessor import DataProcessor
+import dataprocessor
 
 # Import a bunch of numpy functions directly.
 external_funcs = {'Abs': np.abs,
@@ -17,7 +17,7 @@ __all__ = external_funcs.keys()
 
 # FIXME - figure out how to properly bind func into ExternalDP class
 for local_name, func in external_funcs.iteritems():
-    class ExternalDP(DataProcessor):
+    class ExternalDP(dataprocessor.DataProcessor):
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
