@@ -33,10 +33,11 @@ for clsname, cls in alldps.iteritems():
         continue
 
     funname = clsname.lower()
-    if issubclass(cls, Source):
-        exec('%s = _source_to_function(%s)' % (funname, clsname))
-    else:
-        exec('%s = _dataprocessor_to_function(%s)' % (funname, clsname))
+    if not funname in alldps:
+        if issubclass(cls, Source):
+            exec('%s = _source_to_function(%s)' % (funname, clsname))
+        else:
+            exec('%s = _dataprocessor_to_function(%s)' % (funname, clsname))
 
     __all__.append(clsname)
     __all__.append(funname)

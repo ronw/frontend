@@ -1,3 +1,5 @@
+import functools
+
 import numpy as np
 
 import scikits.audiolab as audiolab
@@ -44,3 +46,8 @@ class AudioSource(dataprocessor.Source):
             except RuntimeError:
                 nremaining = 0
         f.close()
+
+@functools.wraps(AudioSource.__init__)
+def audiosource(*args, **kwargs):
+    src = AudioSource(*args, **kwargs)
+    return np.concatenate([x for x in src])
