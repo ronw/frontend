@@ -1,23 +1,31 @@
-import numpy as np
-import scipy as sp
+import numpy
+import scipy
 
 import dataprocessor
 
+
 # Import a bunch of numpy functions directly.
-external_funcs = {'Abs': np.abs,
-                  'Diff': np.diff,
-                  'FFT': np.fft.fft, 'IFFT': np.fft.ifft,
-                  'Flatten': lambda x: x.flatten(),
-                  'RFFT': np.fft.rfft, 'IRFFT': np.fft.irfft,
-                  'Real': np.real, 'Imag': np.imag,
-                  'Square': np.square, 'Sqrt': np.sqrt,
+external_funcs = {'Abs': ('numpy.abs', numpy.abs),
+                  'Diff': ('numpy.diff', numpy.diff),
+                  'Exp': ('numpy.exp', numpy.exp),
+                  'Flatten': ("numpy's flatten", lambda x: x.flatten()),
+                  'FFT': ('numpy.fft.fft', numpy.fft.fft),
+                  'IFFT': ('numpy.fft.ifft', numpy.fft.ifft),
+                  'RFFT': ('numpy.fft.rfft', numpy.fft.rfft),
+                  'IRFFT': ('numpy.fft.irfft', numpy.fft.irfft),
+                  'Real': ('numpy.real', numpy.real),
+                  'Imag': ('numpy.imag', numpy.imag),
+                  'Square': ('numpy.square', numpy.square),
+                  'Sqrt': ('numpy.sqrt', numpy.sqrt),
                   }
                   
 __all__ = external_funcs.keys()
 
-# FIXME - figure out how to properly bind func into ExternalDP class
-for local_name, func in external_funcs.iteritems():
+for local_name, tpl in external_funcs.iteritems():
+    name, func = tpl
     class ExternalDP(dataprocessor.DataProcessor):
+        __doc__ = "DataProcessor wrapper around %s." % name
+
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs

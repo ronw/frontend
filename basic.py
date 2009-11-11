@@ -11,10 +11,20 @@ import dataprocessor
 from externaldps import *
 
 class Resample(dataprocessor.DataProcessor):
-    """Use scikits.samplerate
+    """Resamples input using scikits.samplerate.
 
-    For best results len(frame)*ratio should be an integer.  Its
-    probably best to do this outside of the frontend
+    Attributes
+    ----------
+    ratio : float
+        Resampling ratio.  For best results len(frame)*ratio should be
+        an integer.
+    type : str
+        resample type (see scikits.samplerate.resample)
+    verbose : bool
+
+    See Also
+    --------
+    scikits.samplerate.resample
     """
     def __init__(self, ratio=None, type='sinc_fastest', verbose=False):
         self.ratio = ratio
@@ -30,7 +40,17 @@ class Resample(dataprocessor.DataProcessor):
 
 
 class Normalize(dataprocessor.DataProcessor):
-    """Normalize each frame using a norm of the given order"""
+    """Normalize each frame using a norm of the given order.
+
+    Attributes
+    ----------
+    ord : see numpy.linalg.norm
+        Order of the norm.
+
+    See Also
+    --------
+    numpy.linalg.norm
+    """
     def __init__(self, ord=None):
         self.ord = ord
 
@@ -39,6 +59,10 @@ class Normalize(dataprocessor.DataProcessor):
 
 
 class Mono(dataprocessor.DataProcessor):
+    """Convert multichannel frames to mono.
+
+    Takes the mean across all channels.
+    """
     def process_frame(self, frame):
         if frame.ndim > 1:
             mono_frame =  frame.mean(1)
@@ -47,18 +71,27 @@ class Mono(dataprocessor.DataProcessor):
         return mono_frame
 
 
-class Preemphasize(dataprocessor.DataProcessor):  # or just filter()
-    pass
+#class Preemphasize(dataprocessor.DataProcessor):  # or just filter()
+#    pass
 
 
 # essentially a simple buffer - works for matrices too... (really row features)
 class Framer(dataprocessor.DataProcessor):
-    """open arbitrary audio file
+    """Turn an arbitrary length sequence of samples into regularly spaced frames.
     
-    arguments should be in second (or ms) units, not samples (as they
-    are now)
-    
-    handles zero padding of final frames
+    Handles zero padding of final frames.
+
+    Attributes
+    ----------
+    nwin : int
+        Length of frame (window) in samples.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+
+    See Also
+    --------
+    OverlapAdd : Inverse of Framer.
     """
     def __init__(self, nwin, nhop=None):
         self.nwin = nwin
@@ -107,11 +140,22 @@ class Framer(dataprocessor.DataProcessor):
 
 
 class OverlapAdd(dataprocessor.DataProcessor):
-    """Perform overlap-add resynthesis
+    """Perform overlap-add resynthesis of a sequence of frames.
 
-    Inverse of Framer()
+    Inverse of Framer().
+
+    Attributes
+    ----------
+    nwin : int
+        Length of frame (window) in samples.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+
+    See Also
+    --------
+    Framer
     """
-
     def __init__(self, nwin=512, nhop=None):
         self.nwin = nwin
         if nhop is None:
@@ -137,6 +181,19 @@ class OverlapAdd(dataprocessor.DataProcessor):
 
 
 class Window(dataprocessor.DataProcessor):
+    """Multiply frames by a constant window function.
+
+    Attributes
+    ----------
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+
+    See Also
+    --------
+    numpy.hamming : Hamming window function
+    numpy.ones : Rectangular window function
+    """
     def __init__(self, winfun=np.hanning):
         self.winfun = winfun
 
@@ -149,11 +206,23 @@ class Window(dataprocessor.DataProcessor):
 
 
 class RMS(dataprocessor.DataProcessor):
+    """Compute root-mean-square energy in decibels of each frame in sequence."""
     def process_frame(self, frame):
         return 20*np.log10(np.sqrt(np.mean(frame**2)))
 
 
 class DB(dataprocessor.DataProcessor):
+    """Convert frames to decibels.
+
+    Attributes
+    ----------
+    minval : float
+        All values below minval are clipped to minval.
+
+    See Also
+    --------
+    IDB
+    """
     def __init__(self, minval=-100.0):
         self.minval = minval
 
@@ -164,11 +233,42 @@ class DB(dataprocessor.DataProcessor):
 
 
 class IDB(dataprocessor.DataProcessor):
+    """Convert frames from decibels to linear units.
+
+    Inverse of DB.
+
+    See Also
+    --------
+    DB
+    """
     def process_frame(self, frame):
         return 10.0 ** (frame / 20)
 
 
+class Log(dataprocessor.DataProcessor):
+    """Take the logarithm of each frame.
+
+    Attributes
+    ----------
+    minval : float
+        All values below minval are clipped to minval.
+    """
+    def __init__(self, floor=-5.0):
+        self.minval = minval
+
+    def process_frame(self, minval):
+        return np.maximum(np.log(frame), self.minval)
+
+
 class Filterbank(dataprocessor.DataProcessor):
+    """Warp STFT frames by passing them through the given filterbank.
+
+    Attributes
+    ----------
+    fb : array_like
+        Matrix of filterbank weights.  Each incoming frame is
+        multiplied by this matrix.
+    """
     def __init__(self, fb):
         self.fb = fb
         
@@ -176,31 +276,102 @@ class Filterbank(dataprocessor.DataProcessor):
         return np.dot(self.fb, frame)
 
 
-class Log(dataprocessor.DataProcessor):
-    def __init__(self, floor=-5.0):
-        self.floor = floor
-
-    def process_frame(self, frame):
-        return np.maximum(np.log(frame), self.floor)
-
-
 # compound feature extractors:
 
 def STFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    """Compute the Short-time Fourier Transform of incoming samples.
+
+    Parameters
+    ----------
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+
+    See Also
+    --------
+    ISTFT : Inverse STFT.
+    """
     if nwin is None:
         nwin = nfft
     return dataprocessor.Pipeline(Framer(nwin, nhop), Window(winfun),
                                   RFFT(nfft))
 
+
 def ISTFT(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    """Compute inverse Short-time Fourier Transform of incoming frames.
+
+    Parameters
+    ----------
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+
+    See Also
+    --------
+    STFT : Forward STFT.
+    """
     if nwin is None:
         nwin = nfft
     return dataprocessor.Pipeline(IRFFT(nfft), Window(winfun),
                                   OverlapAdd(nwin, nhop))
 
+
 def LogSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    """Compute the log power spectrum of incoming samples in decibels.
+
+    Parameters
+    ----------
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+
+    See Also
+    --------
+    STFT : Short-time Fourier transform.
+    """
     return dataprocessor.Pipeline(STFT(nfft, nwin, nhop, winfun), DB())
 
+
 def PowSpec(nfft, nwin=None, nhop=None, winfun=np.hanning):
+    """Compute the power spectrum of incoming samples.
+
+    Parameters
+    ----------
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+
+    See Also
+    --------
+    STFT : Short-time Fourier transform.
+    """
     return dataprocessor.Pipeline(STFT(nfft, nwin, nhop, winfun), Abs(),
                                   Square())

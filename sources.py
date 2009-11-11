@@ -8,11 +8,14 @@ import dataprocessor
 from mock_sndfile import MockSndfile
 
 class AudioSource(dataprocessor.Source):
-    """ Reads samples from an audio file (or array)
+    """Reads samples from an audio file or array.
 
-    Returns a generator that returns sequential lists of nbuf samples
-    arguments should be in second (or ms) units, not samples (as they
-    are now)
+    Parameters
+    ----------
+    
+    Can be used as a generator that returns sequential lists of nbuf
+    samples arguments should be in second (or ms) units, not samples
+    (as they are now).
     """
     def __init__(self, filename, start=0, end=None, nbuf=None):
         self.filename = filename
@@ -47,7 +50,3 @@ class AudioSource(dataprocessor.Source):
                 nremaining = 0
         f.close()
 
-@functools.wraps(AudioSource.__init__)
-def audiosource(*args, **kwargs):
-    src = AudioSource(*args, **kwargs)
-    return np.concatenate([x for x in src])

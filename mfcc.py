@@ -6,6 +6,36 @@ import dataprocessor
 
 def MelSpec(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
          nmel=40, width=1.0, fmin=0, fmax=None):
+    """Mel-frequency power spectrum.
+
+    Parameters
+    ----------
+    samplerate : int
+        Sampling rate of the incoming signal.
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+    nmel : int
+        Number of Mel bands to use.
+    width : float
+        The constant width of each band relative to standard Mel. Defaults 1.0.
+    fmin : float
+        Frequency in Hz of the lowest edge of the Mel bands. Defaults to 0.
+    fmax : float
+        Frequency in Hz of the upper edge of the Mel bands. Defaults
+        to `samplerate` / 2
+    
+    See Also
+    --------
+    STFT : Short-time Fourier transform.
+    """
     FB = melfb(samplerate, nfft, nmel, width, fmin, fmax) 
     return dataprocessor.Pipeline(basic.PowSpec(nfft, nwin, nhop, winfun),
                                   basic.Filterbank(FB))
@@ -18,6 +48,38 @@ def _mel_to_hz(z):
     return 700.0 * (10.0**(z / 2595.0) - 1.0)
 
 def melfb(samplerate, nfft, nfilts=40, width=1.0, fmin=0, fmax=None):
+    """Create a Filterbank matrix to combine FFT bins into Mel-frequency bins.
+
+    Parameters
+    ----------
+    samplerate : int
+        Sampling rate of the incoming signal.
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+    nmel : int
+        Number of Mel bands to use.
+    width : float
+        The constant width of each band relative to standard Mel. Defaults 1.0.
+    fmin : float
+        Frequency in Hz of the lowest edge of the Mel bands. Defaults to 0.
+    fmax : float
+        Frequency in Hz of the upper edge of the Mel bands. Defaults
+        to `samplerate` / 2.
+
+    See Also
+    --------
+    Filterbank
+    MelSpec
+    """
+
     if fmax is None:
         fmax = samplerate / 2
 
@@ -50,7 +112,15 @@ def melfb(samplerate, nfft, nfilts=40, width=1.0, fmin=0, fmax=None):
 
 
 def dctfb(ndct, nrow):
-    """ Create a DCT (type 3) matrix """
+    """Create a DCT (type 3) matrix.
+
+    Parameters
+    ----------
+    ndct : int
+        Number of DCT components.
+    nrow : int
+        Number of rows.
+    """
     DCT = np.empty((ndct, nrow))
     for i in xrange(ndct):
         DCT[i,:] = (np.cos(i*np.arange(1, 2*nrow, 2) / (2.0*nrow) * np.pi)
@@ -60,6 +130,38 @@ def dctfb(ndct, nrow):
 
 def MFCC(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
          nmel=40, width=1.0, fmin=0, fmax=None, ndct=13):
+    """Mel-frequency Cepstral Coefficients
+
+    Parameters
+    ----------
+    samplerate : int
+        Sampling rate of the incoming signal.
+    nfft : int
+        FFT length to use.
+    nwin : int
+        Length of each window in samples.  Defaults to `nfft`.
+    nhop : int
+        Number of samples to skip between adjacent frames (hopsize).
+        Defaults to `nwin`.
+    winfun : function of the form fun(winlen), returns array of length winlen
+        Function to generate a window of a given length.  Defaults to
+        numpy.hamming.
+    nmel : int
+        Number of Mel bands to use.
+    width : float
+        The constant width of each band relative to standard Mel. Defaults 1.0.
+    fmin : float
+        Frequency in Hz of the lowest edge of the Mel bands. Defaults to 0.
+    fmax : float
+        Frequency in Hz of the upper edge of the Mel bands. Defaults
+        to `samplerate` / 2
+    ndct : int
+        Number of DCT components (cepstra) to return.
+    
+    See Also
+    --------
+    MelSpec : Mel-frequency power spectrum.
+    """
     DCT = dctfb(ndct, nmel)
     return dataprocessor.Pipeline(
         MelSpec(samplerate, nfft, nwin, nhop, winfun, nmel, width, fmin, fmax),
@@ -68,6 +170,15 @@ def MFCC(samplerate, nfft, nwin=None, nhop=None, winfun=np.hamming,
 
 
 class Stack(dataprocessor.DataProcessor):
+    """Stack output of multiple DataProcessors.
+
+    Stacks the result of running multiple DataProcessors on a single
+    frame into a compound feature vector.
+
+    Attributes
+    ----------
+    dps : list of DataProcessor objects to stack
+    """
     def __init__(self, *dps):
         self.dps = dps
 
@@ -77,6 +188,10 @@ class Stack(dataprocessor.DataProcessor):
             output.append(dp.process_frame(frame))
         return np.asarray(output)
 
+
+class NoOp(dataprocessor.DataProcessor):
+    def process_frame(self, frame):
+        return frame
 
 class Delta(dataprocessor.DataProcessor):
     def __init__(self):
