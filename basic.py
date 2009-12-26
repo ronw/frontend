@@ -253,10 +253,10 @@ class Log(dataprocessor.DataProcessor):
     minval : float
         All values below minval are clipped to minval.
     """
-    def __init__(self, floor=-5.0):
+    def __init__(self, minval=-5.0):
         self.minval = minval
 
-    def process_frame(self, minval):
+    def process_frame(self, frame):
         return np.maximum(np.log(frame), self.minval)
 
 
